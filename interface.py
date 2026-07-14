@@ -1,5 +1,9 @@
 import flet as ft
 import requests
+import os
+
+# O seu novo endereço oficial da API na nuvem!
+URL_BASE = "https://controle-guias.onrender.com"
 
 def main(page: ft.Page):
     # ==========================================
@@ -14,17 +18,12 @@ def main(page: ft.Page):
     caminho_pdf_selecionado = [None]
 
     # ==========================================
-    # 2. SELETORES DE ARQUIVOS (O JEITO FLET 1.0)
+    # 2. SELETORES DE ARQUIVOS
     # ==========================================
-    # Apenas criamos os serviços de arquivo (SEM on_result)
     seletor_nova_guia = ft.FilePicker()
     seletor_assinatura = ft.FilePicker()
-    
-    # IMPORTANTE: No Flet 1.0, o FilePicker NÃO VAI no page.overlay!
-    # Apenas criamos a variável e usamos o método assíncrono diretamente.
 
     async def selecionar_arquivo_inicial(e):
-        # Chama a janela do Windows e espera a resposta
         arquivos = await seletor_nova_guia.pick_files(allowed_extensions=["pdf"])
         if arquivos:
             caminho_pdf_selecionado[0] = arquivos[0].path
@@ -43,7 +42,6 @@ def main(page: ft.Page):
         content=ft.Column([campo_material, campo_data, botao_anexar], tight=True),
     )
     
-    # O pop-up SIM vai no overlay (ele é um controle visual)
     page.overlay.append(dialogo_nova_guia)
 
     def fechar_dialogo(e=None):
@@ -54,7 +52,7 @@ def main(page: ft.Page):
         if not caminho_pdf_selecionado[0]:
             return
             
-        url_api = "http://127.0.0.1:8000/guias/upload"
+        url_api = f"{URL_BASE}/guias/upload"
         dados = {"nome_material": campo_material.value, "data_recebimento": campo_data.value}
         arquivos = {"ficheiro_pdf": open(caminho_pdf_selecionado[0], "rb")}
         
@@ -89,11 +87,10 @@ def main(page: ft.Page):
 
     def criar_acao_assinar(nome):
         async def acao(e):
-            # Usando o seletor diretamente como serviço
             arquivos = await seletor_assinatura.pick_files(allowed_extensions=["pdf"])
             if arquivos:
                 caminho_pdf = arquivos[0].path
-                url_api = f"http://127.0.0.1:8000/guias/{nome}/assinar"
+                url_api = f"{URL_BASE}/guias/{nome}/assinar"
                 req_arquivos = {"ficheiro_pdf_assinado": open(caminho_pdf, "rb")}
                 try:
                     resposta = requests.put(url_api, files=req_arquivos)
@@ -109,10 +106,10 @@ def main(page: ft.Page):
         aba_assinadas.controls.clear()
         
         try:
-            resp_pendentes = requests.get("http://127.0.0.1:8000/guias/pendentes")
+            resp_pendentes = requests.get(f"{URL_BASE}/guias/pendentes")
             if resp_pendentes.status_code == 200:
                 for guia in resp_pendentes.json().get("guias", []):
-                    material = guia.get("nome_material", guia.get("numero_guia", "Sem Nome"))
+                    material = guia.get("nome_material", "Sem Nome")
                     data = guia.get("data_recebimento", "Sem Data")
                     
                     cartao = ft.Card(
@@ -126,16 +123,16 @@ def main(page: ft.Page):
                                 icon=ft.Icons.EDIT, 
                                 color=ft.Colors.WHITE, 
                                 bgcolor=ft.Colors.ORANGE_ACCENT, 
-                                on_click=criar_acao_assinar(material) # Chama a função assíncrona
+                                on_click=criar_acao_assinar(material)
                             )
                         )
                     )
                     aba_pendentes.controls.append(cartao)
 
-            resp_assinadas = requests.get("http://127.0.0.1:8000/guias/assinadas")
+            resp_assinadas = requests.get(f"{URL_BASE}/guias/assinadas")
             if resp_assinadas.status_code == 200:
                 for guia in resp_assinadas.json().get("guias", []):
-                    material = guia.get("nome_material", guia.get("numero_guia", "Sem Nome"))
+                    material = guia.get("nome_material", "Sem Nome")
                     data = guia.get("data_recebimento", "Sem Data")
                     
                     cartao = ft.Card(
@@ -177,5 +174,6 @@ def main(page: ft.Page):
     page.add(controle_abas)
 
 if __name__ == "__main__":
-    # flet.app indica que ele deve rodar como servidor web
-    ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=8080)
+    # Configuração obrigatória para o Flet rodar na web (Render)
+    porta = int(os.environ.get("PORT", 8080))
+    ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=porta, host="0.0.0.0")
