@@ -1,6 +1,7 @@
 import flet as ft
 import requests
 import os
+import threading # <-- O nosso novo salva-vidas para não travar a tela!
 
 URL_BASE = "https://controle-guias.onrender.com"
 PASTA_UPLOADS = "uploads_temporarios"
@@ -61,54 +62,65 @@ def main(page: ft.Page):
         on_click=lambda _: seletor_nova_guia.pick_files()
     )
 
-    # Criamos o botão salvar antes para podermos mudar o texto dele
-    botao_salvar = ft.FilledButton("Salvar", style=ft.ButtonStyle(bgcolor=ft.colors.GREEN, color=ft.colors.WHITE))
-
     def salvar_guia(e):
+        botao = e.control
+        
+        # Travas iniciais rápidas
         if not caminho_pdf_selecionado[0]:
-            mostrar_aviso("Nenhum PDF foi selecionado!")
+            mostrar_aviso("Nenhum PDF foi selecionado!", ft.colors.RED)
             return
             
         if not os.path.exists(caminho_pdf_selecionado[0]):
-            mostrar_aviso("A transferir do PC para a nuvem... Tente de novo em 3 segundos.", ft.colors.ORANGE)
+            mostrar_aviso("O PDF ainda está a ser enviado para a nuvem. Aguarde 3 seg e tente de novo.", ft.colors.ORANGE)
             return
-            
-        url_api = f"{URL_BASE}/guias/upload"
-        dados = {"nome_material": campo_material.value, "data_recebimento": campo_data.value}
-        
-        # MUDANÇA 1: Mostra que está a trabalhar e evita duplos cliques
-        botao_salvar.text = "Enviando..."
-        botao_salvar.disabled = True
-        page.update()
-        
-        try:
-            with open(caminho_pdf_selecionado[0], "rb") as f:
-                arquivos = {"ficheiro_pdf": f}
-                # MUDANÇA 2: TIMEOUT! Se demorar mais de 15s, ele desiste e não congela a tela
-                resposta = requests.post(url_api, data=dados, files=arquivos, timeout=15)
-            
-            if resposta.status_code == 200:
-                campo_material.value = ""
-                campo_data.value = ""
-                botao_anexar.text = "Anexar PDF Inicial"
-                caminho_pdf_selecionado[0] = None
-                dialogo_nova_guia.open = False
-                carregar_guias() 
-                mostrar_aviso("Guia salva com sucesso!", ft.colors.GREEN)
-            else:
-                mostrar_aviso(f"Erro da API: {resposta.text}")
-                
-        except requests.exceptions.Timeout:
-            mostrar_aviso("A API demorou muito a responder (está a acordar). Clique em Salvar de novo!", ft.colors.ORANGE)
-        except Exception as ex:
-            mostrar_aviso(f"Erro de conexão com a API: {ex}")
-        finally:
-            # MUDANÇA 3: Devolve o botão ao normal, não importa se deu certo ou errado
-            botao_salvar.text = "Salvar"
-            botao_salvar.disabled = False
-            page.update()
 
-    botao_salvar.on_click = salvar_guia
+        # Guarda os dados antes de abrir a thread
+        nome_mat = campo_material.value
+        data_rec = campo_data.value
+
+        # Atualiza o botão IMEDIATAMENTE (não congela)
+        botao.text = "Enviando..."
+        botao.disabled = True
+        botao.update()
+
+        # O trabalhador em segundo plano
+        def enviar_dados_nos_bastidores():
+            url_api = f"{URL_BASE}/guias/upload"
+            dados = {"nome_material": nome_mat, "data_recebimento": data_rec}
+            
+            try:
+                with open(caminho_pdf_selecionado[0], "rb") as f:
+                    arquivos = {"ficheiro_pdf": f}
+                    # Espera no máximo 25 segundos para não ficar preso
+                    resposta = requests.post(url_api, data=dados, files=arquivos, timeout=25)
+                
+                if resposta.status_code == 200:
+                    campo_material.value = ""
+                    campo_data.value = ""
+                    botao_anexar.text = "Anexar PDF Inicial"
+                    botao_anexar.update()
+                    caminho_pdf_selecionado[0] = None
+                    dialogo_nova_guia.open = False
+                    page.update()
+                    carregar_guias() 
+                    mostrar_aviso("Guia salva com sucesso!", ft.colors.GREEN)
+                else:
+                    mostrar_aviso(f"Erro da API: {resposta.text}", ft.colors.RED)
+                    
+            except requests.exceptions.Timeout:
+                mostrar_aviso("A API demorou a acordar! Clique em Salvar novamente agora.", ft.colors.ORANGE)
+            except Exception as ex:
+                mostrar_aviso(f"Erro de sistema: {ex}", ft.colors.RED)
+            finally:
+                # Volta o botão ao normal, aconteça o que acontecer
+                botao.text = "Salvar"
+                botao.disabled = False
+                botao.update()
+
+        # Dispara o trabalhador!
+        threading.Thread(target=enviar_dados_nos_bastidores).start()
+
+    botao_salvar = ft.FilledButton("Salvar", on_click=salvar_guia, style=ft.ButtonStyle(bgcolor=ft.colors.GREEN, color=ft.colors.WHITE))
 
     dialogo_nova_guia = ft.AlertDialog(
         title=ft.Text("Cadastrar Novo Material"),
@@ -211,5 +223,4 @@ def main(page: ft.Page):
 
 if __name__ == "__main__":
     porta = int(os.environ.get("PORT", 8080))
-    # Mantendo a chave secreta aqui para garantir!
     ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=porta, host="0.0.0.0", upload_dir=PASTA_UPLOADS, secret_key="chave_secreta_guias_123")
