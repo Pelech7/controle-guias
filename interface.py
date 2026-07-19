@@ -8,7 +8,7 @@ os.makedirs(PASTA_UPLOADS, exist_ok=True)
 
 def main(page: ft.Page):
     # ==========================================
-    # 1. CONFIGURAÇÕES DA PÁGINA
+    # 1. CONFIGURAÇÕES DA PÁGINA E ALERTAS
     # ==========================================
     page.title = "Controle de Guias de Recebimento"
     page.theme_mode = ft.ThemeMode.LIGHT
@@ -17,6 +17,11 @@ def main(page: ft.Page):
     page.padding = 0
 
     caminho_pdf_selecionado = [None]
+
+    def mostrar_aviso(mensagem, cor=ft.colors.RED):
+        page.snack_bar = ft.SnackBar(ft.Text(mensagem), bgcolor=cor)
+        page.snack_bar.open = True
+        page.update()
 
     # ==========================================
     # 2. SELETORES DE ARQUIVOS (VERSÃO WEB)
@@ -27,18 +32,14 @@ def main(page: ft.Page):
     def ao_selecionar_nova_guia(e: ft.FilePickerResultEvent):
         if e.files:
             nome_arquivo = e.files[0].name
-            # Envia o ficheiro do navegador para o servidor do Flet
             seletor_nova_guia.upload([
                 ft.FilePickerUploadFile(nome_arquivo, upload_url=page.get_upload_url(nome_arquivo, 60))
             ])
-            # Regista onde o servidor guardou o ficheiro temporariamente
             caminho_pdf_selecionado[0] = os.path.join(PASTA_UPLOADS, nome_arquivo)
             botao_anexar.text = f"PDF: {nome_arquivo}"
             page.update()
 
     seletor_nova_guia.on_result = ao_selecionar_nova_guia
-    
-    # Na Web é OBRIGATÓRIO estar no overlay
     page.overlay.append(seletor_nova_guia)
     page.overlay.append(seletor_assinatura)
 
@@ -58,7 +59,6 @@ def main(page: ft.Page):
         title=ft.Text("Cadastrar Novo Material"),
         content=ft.Column([campo_material, campo_data, botao_anexar], tight=True),
     )
-    
     page.overlay.append(dialogo_nova_guia)
 
     def fechar_dialogo(e=None):
@@ -67,14 +67,17 @@ def main(page: ft.Page):
 
     def salvar_guia(e):
         if not caminho_pdf_selecionado[0]:
-            print("Nenhum PDF selecionado!")
+            mostrar_aviso("Nenhum PDF foi selecionado!")
+            return
+            
+        if not os.path.exists(caminho_pdf_selecionado[0]):
+            mostrar_aviso("A processar o anexo... clique em Salvar novamente num instante.", ft.colors.ORANGE)
             return
             
         url_api = f"{URL_BASE}/guias/upload"
         dados = {"nome_material": campo_material.value, "data_recebimento": campo_data.value}
         
         try:
-            # Lê o ficheiro da pasta temporária e envia para a API
             with open(caminho_pdf_selecionado[0], "rb") as f:
                 arquivos = {"ficheiro_pdf": f}
                 resposta = requests.post(url_api, data=dados, files=arquivos)
@@ -86,8 +89,11 @@ def main(page: ft.Page):
                 caminho_pdf_selecionado[0] = None
                 fechar_dialogo()
                 carregar_guias() 
+                mostrar_aviso("Guia salva com sucesso!", ft.colors.GREEN)
+            else:
+                mostrar_aviso(f"Erro do servidor: {resposta.text}")
         except Exception as ex:
-            print(f"Erro na API: {ex}")
+            mostrar_aviso(f"Erro de conexão com a API: {ex}")
 
     dialogo_nova_guia.actions = [
         ft.TextButton("Cancelar", on_click=fechar_dialogo),
@@ -108,8 +114,7 @@ def main(page: ft.Page):
 
     def criar_acao_assinar(nome):
         def acao(e):
-            print(f"Botão assinar clicado para: {nome}")
-            # Em breve faremos o upload da assinatura da mesma forma
+            mostrar_aviso(f"Em desenvolvimento para: {nome}", ft.colors.BLUE)
         return acao
 
     def carregar_guias():
@@ -164,24 +169,24 @@ def main(page: ft.Page):
     carregar_guias()
 
     # ==========================================
-    # 5. ESTRUTURA DE ABAS (TABS)
+    # 5. ESTRUTURA DE ABAS (CORRIGIDA)
     # ==========================================
-    tab_bar = ft.TabBar(
-        tabs=[
-            ft.Tab(label="Recebimento", icon=ft.icons.ASSIGNMENT_RETURNED),
-            ft.Tab(label="Assinadas", icon=ft.icons.ASSIGNMENT_TURNED_IN),
-        ]
-    )
-
-    tab_view = ft.TabBarView(
+    controle_abas = ft.Tabs(
+        selected_index=0,
         expand=True,
-        controls=[
-            ft.Container(content=aba_pendentes, padding=15),
-            ft.Container(content=aba_assinadas, padding=15),
+        tabs=[
+            ft.Tab(
+                text="Recebimento",
+                icon=ft.icons.ASSIGNMENT_RETURNED,
+                content=ft.Container(content=aba_pendentes, padding=15)
+            ),
+            ft.Tab(
+                text="Assinadas",
+                icon=ft.icons.ASSIGNMENT_TURNED_IN,
+                content=ft.Container(content=aba_assinadas, padding=15)
+            ),
         ]
     )
-
-    controle_abas = ft.Tabs(length=2, selected_index=0, expand=True, content=ft.Column(expand=True, controls=[tab_bar, tab_view]))
     page.add(controle_abas)
 
 if __name__ == "__main__":
