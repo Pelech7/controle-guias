@@ -91,12 +91,12 @@ def main(page: ft.Page):
 
     dialogo_nova_guia.actions = [
         ft.TextButton("Cancelar", on_click=fechar_dialogo),
-        ft.FilledButton("Salvar", on_click=salvar_guia, style=ft.ButtonStyle(bgcolor=ft.Colors.GREEN, color=ft.Colors.WHITE))
+        ft.FilledButton("Salvar", on_click=salvar_guia, style=ft.ButtonStyle(bgcolor=ft.colors.GREEN, color=ft.colors.WHITE))
     ]
 
     page.floating_action_button = ft.FloatingActionButton(
-        content=ft.Row([ft.Icon(ft.icons.ADD), ft.Text("Nova Guia", color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.CENTER, tight=True),
-        bgcolor=ft.Colors.BLUE_ACCENT, width=130,
+        content=ft.Row([ft.Icon(ft.icons.ADD), ft.Text("Nova Guia", color=ft.colors.WHITE)], alignment=ft.MainAxisAlignment.CENTER, tight=True),
+        bgcolor=ft.colors.BLUE_ACCENT, width=130,
         on_click=lambda e: setattr(dialogo_nova_guia, 'open', True) or page.update()
     )
 
@@ -126,14 +126,14 @@ def main(page: ft.Page):
                     cartao = ft.Card(
                         elevation=3,
                         content=ft.ListTile(
-                            leading=ft.Icon(ft.icons.PICTURE_AS_PDF, color=ft.Colors.RED_ACCENT, size=40),
+                            leading=ft.Icon(ft.icons.PICTURE_AS_PDF, color=ft.colors.RED_ACCENT, size=40),
                             title=ft.Text(f"Material: {material}", weight=ft.FontWeight.BOLD),
                             subtitle=ft.Text(f"Recebido em: {data}\nStatus: Pendente Assinatura"),
                             trailing=ft.FilledButton(
                                 "Assinar", 
                                 icon=ft.icons.EDIT, 
-                                color=ft.Colors.WHITE, 
-                                bgcolor=ft.Colors.ORANGE_ACCENT, 
+                                color=ft.colors.WHITE, 
+                                bgcolor=ft.colors.ORANGE_ACCENT, 
                                 on_click=criar_acao_assinar(material)
                             )
                         )
@@ -149,10 +149,10 @@ def main(page: ft.Page):
                     cartao = ft.Card(
                         elevation=2,
                         content=ft.ListTile(
-                            leading=ft.Icon(ft.icons.CHECK_CIRCLE, color=ft.Colors.GREEN, size=40),
+                            leading=ft.Icon(ft.icons.CHECK_CIRCLE, color=ft.colors.GREEN, size=40),
                             title=ft.Text(f"Material: {material}", weight=ft.FontWeight.BOLD),
                             subtitle=ft.Text(f"Recebido em: {data}\nStatus: Concluído e Assinado"),
-                            trailing=ft.IconButton(icon=ft.icons.DONE_ALL, icon_color=ft.Colors.GREEN)
+                            trailing=ft.IconButton(icon=ft.icons.DONE_ALL, icon_color=ft.colors.GREEN)
                         )
                     )
                     aba_assinadas.controls.append(cartao)
