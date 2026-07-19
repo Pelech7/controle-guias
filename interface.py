@@ -2,8 +2,9 @@ import flet as ft
 import requests
 import os
 
-# O seu novo endereço oficial da API na nuvem!
 URL_BASE = "https://controle-guias.onrender.com"
+PASTA_UPLOADS = "uploads_temporarios"
+os.makedirs(PASTA_UPLOADS, exist_ok=True)
 
 def main(page: ft.Page):
     # ==========================================
@@ -18,24 +19,40 @@ def main(page: ft.Page):
     caminho_pdf_selecionado = [None]
 
     # ==========================================
-    # 2. SELETORES DE ARQUIVOS
+    # 2. SELETORES DE ARQUIVOS (VERSÃO WEB)
     # ==========================================
-    seletor_nova_guia = ft.FilePicker()
-    seletor_assinatura = ft.FilePicker()
-
-    async def selecionar_arquivo_inicial(e):
-        arquivos = await seletor_nova_guia.pick_files(allowed_extensions=["pdf"])
-        if arquivos:
-            caminho_pdf_selecionado[0] = arquivos[0].path
-            botao_anexar.text = f"PDF: {arquivos[0].name}"
+    # Na Web, usamos o on_result e o método page.get_upload_url para contornar a segurança do navegador
+    def ao_selecionar_nova_guia(e: ft.FilePickerResultEvent):
+        if e.files:
+            nome_arquivo = e.files[0].name
+            # Envia o ficheiro do navegador para o servidor do Flet
+            seletor_nova_guia.upload([
+                ft.FilePickerUploadFile(nome_arquivo, upload_url=page.get_upload_url(nome_arquivo, 60))
+            ])
+            # Regista onde o servidor guardou o ficheiro temporariamente
+            caminho_pdf_selecionado[0] = os.path.join(PASTA_UPLOADS, nome_arquivo)
+            botao_anexar.text = f"PDF: {nome_arquivo}"
             page.update()
+
+    seletor_nova_guia = ft.FilePicker(on_result=ao_selecionar_nova_guia)
+    seletor_assinatura = ft.FilePicker() # Será ajustado para assinatura web depois, se necessário
+    
+    # Na Web é OBRIGATÓRIO estar no overlay
+    page.overlay.append(seletor_nova_guia)
+    page.overlay.append(seletor_assinatura)
 
     # ==========================================
     # 3. JANELA DE CADASTRAR NOVA GUIA
     # ==========================================
     campo_material = ft.TextField(label="Nome do Material", width=300)
     campo_data = ft.TextField(label="Data de Recebimento", width=300)
-    botao_anexar = ft.FilledButton("Anexar PDF Inicial", icon=ft.Icons.UPLOAD_FILE, on_click=selecionar_arquivo_inicial)
+    
+    # Agora chama o picker nativo do FilePicker
+    botao_anexar = ft.FilledButton(
+        "Anexar PDF Inicial", 
+        icon=ft.Icons.UPLOAD_FILE, 
+        on_click=lambda _: seletor_nova_guia.pick_files(allowed_extensions=["pdf"])
+    )
 
     dialogo_nova_guia = ft.AlertDialog(
         title=ft.Text("Cadastrar Novo Material"),
@@ -49,15 +66,20 @@ def main(page: ft.Page):
         page.update()
 
     def salvar_guia(e):
+        # A trava que estava bloqueando (agora vai passar porque o upload funciona)
         if not caminho_pdf_selecionado[0]:
+            print("Nenhum PDF selecionado!")
             return
             
         url_api = f"{URL_BASE}/guias/upload"
         dados = {"nome_material": campo_material.value, "data_recebimento": campo_data.value}
-        arquivos = {"ficheiro_pdf": open(caminho_pdf_selecionado[0], "rb")}
         
         try:
-            resposta = requests.post(url_api, data=dados, files=arquivos)
+            # Lê o ficheiro da pasta temporária do Render e envia para a API
+            with open(caminho_pdf_selecionado[0], "rb") as f:
+                arquivos = {"ficheiro_pdf": f}
+                resposta = requests.post(url_api, data=dados, files=arquivos)
+            
             if resposta.status_code == 200:
                 campo_material.value = ""
                 campo_data.value = ""
@@ -86,19 +108,9 @@ def main(page: ft.Page):
     aba_assinadas = ft.ListView(expand=True, controls=[])
 
     def criar_acao_assinar(nome):
-        async def acao(e):
-            arquivos = await seletor_assinatura.pick_files(allowed_extensions=["pdf"])
-            if arquivos:
-                caminho_pdf = arquivos[0].path
-                url_api = f"{URL_BASE}/guias/{nome}/assinar"
-                req_arquivos = {"ficheiro_pdf_assinado": open(caminho_pdf, "rb")}
-                try:
-                    resposta = requests.put(url_api, files=req_arquivos)
-                    if resposta.status_code == 200:
-                        print(f"Sucesso: {nome} assinado!")
-                        carregar_guias() 
-                except Exception as ex:
-                    print(f"Erro ao assinar: {ex}")
+        # Simplificado por enquanto para focarmos no cadastro
+        def acao(e):
+            print(f"Botão assinar clicado para: {nome}")
         return acao
 
     def carregar_guias():
@@ -174,6 +186,6 @@ def main(page: ft.Page):
     page.add(controle_abas)
 
 if __name__ == "__main__":
-    # Configuração obrigatória para o Flet rodar na web (Render)
     porta = int(os.environ.get("PORT", 8080))
-    ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=porta, host="0.0.0.0")
+    # NOTA: Adicionamos o 'upload_dir' para o servidor aceitar os arquivos do navegador
+    ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=porta, host="0.0.0.0", upload_dir=PASTA_UPLOADS)
