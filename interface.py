@@ -36,7 +36,6 @@ def main(page: ft.Page):
             botao_anexar.text = f"PDF: {nome_arquivo}"
             page.update()
 
-    # CORREÇÃO AQUI: Ligamos a ação DEPOIS de criar o seletor
     seletor_nova_guia.on_result = ao_selecionar_nova_guia
     
     # Na Web é OBRIGATÓRIO estar no overlay
@@ -51,7 +50,7 @@ def main(page: ft.Page):
     
     botao_anexar = ft.FilledButton(
         "Anexar PDF Inicial", 
-        icon=ft.Icons.UPLOAD_FILE, 
+        icon=ft.icons.UPLOAD_FILE, 
         on_click=lambda _: seletor_nova_guia.pick_files(allowed_extensions=["pdf"])
     )
 
@@ -96,7 +95,7 @@ def main(page: ft.Page):
     ]
 
     page.floating_action_button = ft.FloatingActionButton(
-        content=ft.Row([ft.Icon(ft.Icons.ADD), ft.Text("Nova Guia", color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.CENTER, tight=True),
+        content=ft.Row([ft.Icon(ft.icons.ADD), ft.Text("Nova Guia", color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.CENTER, tight=True),
         bgcolor=ft.Colors.BLUE_ACCENT, width=130,
         on_click=lambda e: setattr(dialogo_nova_guia, 'open', True) or page.update()
     )
@@ -127,12 +126,12 @@ def main(page: ft.Page):
                     cartao = ft.Card(
                         elevation=3,
                         content=ft.ListTile(
-                            leading=ft.Icon(ft.Icons.PICTURE_AS_PDF, color=ft.Colors.RED_ACCENT, size=40),
+                            leading=ft.Icon(ft.icons.PICTURE_AS_PDF, color=ft.Colors.RED_ACCENT, size=40),
                             title=ft.Text(f"Material: {material}", weight=ft.FontWeight.BOLD),
                             subtitle=ft.Text(f"Recebido em: {data}\nStatus: Pendente Assinatura"),
                             trailing=ft.FilledButton(
                                 "Assinar", 
-                                icon=ft.Icons.EDIT, 
+                                icon=ft.icons.EDIT, 
                                 color=ft.Colors.WHITE, 
                                 bgcolor=ft.Colors.ORANGE_ACCENT, 
                                 on_click=criar_acao_assinar(material)
@@ -150,10 +149,10 @@ def main(page: ft.Page):
                     cartao = ft.Card(
                         elevation=2,
                         content=ft.ListTile(
-                            leading=ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.GREEN, size=40),
+                            leading=ft.Icon(ft.icons.CHECK_CIRCLE, color=ft.Colors.GREEN, size=40),
                             title=ft.Text(f"Material: {material}", weight=ft.FontWeight.BOLD),
                             subtitle=ft.Text(f"Recebido em: {data}\nStatus: Concluído e Assinado"),
-                            trailing=ft.IconButton(icon=ft.Icons.DONE_ALL, icon_color=ft.Colors.GREEN)
+                            trailing=ft.IconButton(icon=ft.icons.DONE_ALL, icon_color=ft.Colors.GREEN)
                         )
                     )
                     aba_assinadas.controls.append(cartao)
@@ -169,8 +168,8 @@ def main(page: ft.Page):
     # ==========================================
     tab_bar = ft.TabBar(
         tabs=[
-            ft.Tab(label="Recebimento", icon=ft.Icons.ASSIGNMENT_RETURNED),
-            ft.Tab(label="Assinadas", icon=ft.Icons.ASSIGNMENT_TURNED_IN),
+            ft.Tab(label="Recebimento", icon=ft.icons.ASSIGNMENT_RETURNED),
+            ft.Tab(label="Assinadas", icon=ft.icons.ASSIGNMENT_TURNED_IN),
         ]
     )
 
