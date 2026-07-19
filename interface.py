@@ -1,7 +1,7 @@
 import flet as ft
 import requests
 import os
-import threading # <-- O nosso novo salva-vidas para não travar a tela!
+import threading
 
 URL_BASE = "https://controle-guias.onrender.com"
 PASTA_UPLOADS = "uploads_temporarios"
@@ -9,7 +9,7 @@ os.makedirs(PASTA_UPLOADS, exist_ok=True)
 
 def main(page: ft.Page):
     # ==========================================
-    # 1. CONFIGURAÇÕES DA PÁGINA E ALERTAS
+    # 1. CONFIGURAÇÕES DA PÁGINA
     # ==========================================
     page.title = "Controle de Guias de Recebimento"
     page.theme_mode = ft.ThemeMode.LIGHT
@@ -19,13 +19,11 @@ def main(page: ft.Page):
 
     caminho_pdf_selecionado = [None]
 
-    def mostrar_aviso(mensagem, cor=ft.colors.RED):
-        page.snack_bar = ft.SnackBar(ft.Text(mensagem), bgcolor=cor)
-        page.snack_bar.open = True
-        page.update()
+    # TEXTO DE STATUS DENTRO DA JANELA BRANCA (Impossível de não ver!)
+    texto_status = ft.Text("", color=ft.colors.RED, weight=ft.FontWeight.BOLD, size=12)
 
     # ==========================================
-    # 2. SELETORES DE ARQUIVOS (VERSÃO WEB)
+    # 2. SELETORES DE ARQUIVOS
     # ==========================================
     seletor_nova_guia = ft.FilePicker()
     seletor_assinatura = ft.FilePicker()
@@ -37,14 +35,21 @@ def main(page: ft.Page):
                 caminho_pdf_selecionado[0] = os.path.join(PASTA_UPLOADS, nome_arquivo)
                 
                 botao_anexar.text = f"PDF: {nome_arquivo}"
-                botao_anexar.update() 
+                texto_status.value = "PDF escolhido! A enviar para a nuvem..."
+                texto_status.color = ft.colors.BLUE
+                page.update() 
                 
                 seletor_nova_guia.upload([
                     ft.FilePickerUploadFile(nome_arquivo, upload_url=page.get_upload_url(nome_arquivo, 60))
                 ])
-                mostrar_aviso("PDF anexado! Pode clicar em Salvar.", ft.colors.BLUE)
+                
+                texto_status.value = "PDF pronto! Pode clicar em Salvar."
+                texto_status.color = ft.colors.GREEN
+                page.update()
         except Exception as erro:
-            mostrar_aviso(f"Erro ao anexar: {erro}", ft.colors.RED)
+            texto_status.value = f"Erro ao anexar: {erro}"
+            texto_status.color = ft.colors.RED
+            page.update()
 
     seletor_nova_guia.on_result = ao_selecionar_nova_guia
     page.overlay.append(seletor_nova_guia)
@@ -56,34 +61,33 @@ def main(page: ft.Page):
     campo_material = ft.TextField(label="Nome do Material", width=300)
     campo_data = ft.TextField(label="Data de Recebimento", width=300)
     
-    botao_anexar = ft.FilledButton(
-        "Anexar PDF Inicial", 
-        icon=ft.icons.UPLOAD_FILE, 
-        on_click=lambda _: seletor_nova_guia.pick_files()
-    )
+    botao_anexar = ft.FilledButton("Anexar PDF Inicial", icon=ft.icons.UPLOAD_FILE, on_click=lambda _: seletor_nova_guia.pick_files())
 
     def salvar_guia(e):
-        botao = e.control
+        print("----> Botão Salvar foi clicado!") # Vai aparecer nos logs do Render
         
-        # Travas iniciais rápidas
         if not caminho_pdf_selecionado[0]:
-            mostrar_aviso("Nenhum PDF foi selecionado!", ft.colors.RED)
+            texto_status.value = "ERRO: Por favor, anexe o PDF primeiro!"
+            texto_status.color = ft.colors.RED
+            page.update()
             return
             
         if not os.path.exists(caminho_pdf_selecionado[0]):
-            mostrar_aviso("O PDF ainda está a ser enviado para a nuvem. Aguarde 3 seg e tente de novo.", ft.colors.ORANGE)
+            texto_status.value = "O PDF ainda não chegou à nuvem. Aguarde 3s e clique de novo."
+            texto_status.color = ft.colors.ORANGE
+            page.update()
             return
 
-        # Guarda os dados antes de abrir a thread
         nome_mat = campo_material.value
         data_rec = campo_data.value
 
-        # Atualiza o botão IMEDIATAMENTE (não congela)
-        botao.text = "Enviando..."
-        botao.disabled = True
-        botao.update()
+        # Muda o botão e o aviso IMEDIATAMENTE
+        botao_salvar.text = "Enviando..."
+        botao_salvar.disabled = True
+        texto_status.value = "A contactar a API... Por favor aguarde."
+        texto_status.color = ft.colors.BLUE
+        page.update()
 
-        # O trabalhador em segundo plano
         def enviar_dados_nos_bastidores():
             url_api = f"{URL_BASE}/guias/upload"
             dados = {"nome_material": nome_mat, "data_recebimento": data_rec}
@@ -91,40 +95,42 @@ def main(page: ft.Page):
             try:
                 with open(caminho_pdf_selecionado[0], "rb") as f:
                     arquivos = {"ficheiro_pdf": f}
-                    # Espera no máximo 25 segundos para não ficar preso
+                    print("----> A enviar para a API...")
                     resposta = requests.post(url_api, data=dados, files=arquivos, timeout=25)
+                    print(f"----> API respondeu com status: {resposta.status_code}")
                 
                 if resposta.status_code == 200:
                     campo_material.value = ""
                     campo_data.value = ""
                     botao_anexar.text = "Anexar PDF Inicial"
-                    botao_anexar.update()
                     caminho_pdf_selecionado[0] = None
                     dialogo_nova_guia.open = False
-                    page.update()
+                    texto_status.value = ""
                     carregar_guias() 
-                    mostrar_aviso("Guia salva com sucesso!", ft.colors.GREEN)
                 else:
-                    mostrar_aviso(f"Erro da API: {resposta.text}", ft.colors.RED)
+                    texto_status.value = f"A API devolveu erro: {resposta.text}"
+                    texto_status.color = ft.colors.RED
                     
             except requests.exceptions.Timeout:
-                mostrar_aviso("A API demorou a acordar! Clique em Salvar novamente agora.", ft.colors.ORANGE)
+                texto_status.value = "A API demorou a responder (está a acordar). Salve de novo!"
+                texto_status.color = ft.colors.ORANGE
+                print("----> Timeout na API!")
             except Exception as ex:
-                mostrar_aviso(f"Erro de sistema: {ex}", ft.colors.RED)
+                texto_status.value = f"Erro Fatal: {ex}"
+                texto_status.color = ft.colors.RED
+                print(f"----> ERRO FATAL: {ex}")
             finally:
-                # Volta o botão ao normal, aconteça o que acontecer
-                botao.text = "Salvar"
-                botao.disabled = False
-                botao.update()
+                botao_salvar.text = "Salvar"
+                botao_salvar.disabled = False
+                page.update()
 
-        # Dispara o trabalhador!
         threading.Thread(target=enviar_dados_nos_bastidores).start()
 
     botao_salvar = ft.FilledButton("Salvar", on_click=salvar_guia, style=ft.ButtonStyle(bgcolor=ft.colors.GREEN, color=ft.colors.WHITE))
 
     dialogo_nova_guia = ft.AlertDialog(
         title=ft.Text("Cadastrar Novo Material"),
-        content=ft.Column([campo_material, campo_data, botao_anexar], tight=True),
+        content=ft.Column([campo_material, campo_data, botao_anexar, texto_status], tight=True), # Texto de status adicionado aqui!
         actions=[
             ft.TextButton("Cancelar", on_click=lambda e: setattr(dialogo_nova_guia, 'open', False) or page.update()),
             botao_salvar
@@ -144,11 +150,6 @@ def main(page: ft.Page):
     aba_pendentes = ft.ListView(expand=True, controls=[])
     aba_assinadas = ft.ListView(expand=True, controls=[])
 
-    def criar_acao_assinar(nome):
-        def acao(e):
-            mostrar_aviso(f"Em desenvolvimento para: {nome}", ft.colors.BLUE)
-        return acao
-
     def carregar_guias():
         aba_pendentes.controls.clear()
         aba_assinadas.controls.clear()
@@ -167,11 +168,8 @@ def main(page: ft.Page):
                             title=ft.Text(f"Material: {material}", weight=ft.FontWeight.BOLD),
                             subtitle=ft.Text(f"Recebido em: {data}\nStatus: Pendente Assinatura"),
                             trailing=ft.FilledButton(
-                                "Assinar", 
-                                icon=ft.icons.EDIT, 
-                                color=ft.colors.WHITE, 
-                                bgcolor=ft.colors.ORANGE_ACCENT, 
-                                on_click=criar_acao_assinar(material)
+                                "Assinar", icon=ft.icons.EDIT, color=ft.colors.WHITE, bgcolor=ft.colors.ORANGE_ACCENT, 
+                                on_click=lambda e: print("Ação assinar em breve")
                             )
                         )
                     )
@@ -207,16 +205,8 @@ def main(page: ft.Page):
         selected_index=0,
         expand=True,
         tabs=[
-            ft.Tab(
-                text="Recebimento",
-                icon=ft.icons.ASSIGNMENT_RETURNED,
-                content=ft.Container(content=aba_pendentes, padding=15)
-            ),
-            ft.Tab(
-                text="Assinadas",
-                icon=ft.icons.ASSIGNMENT_TURNED_IN,
-                content=ft.Container(content=aba_assinadas, padding=15)
-            ),
+            ft.Tab(text="Recebimento", icon=ft.icons.ASSIGNMENT_RETURNED, content=ft.Container(content=aba_pendentes, padding=15)),
+            ft.Tab(text="Assinadas", icon=ft.icons.ASSIGNMENT_TURNED_IN, content=ft.Container(content=aba_assinadas, padding=15)),
         ]
     )
     page.add(controle_abas)
