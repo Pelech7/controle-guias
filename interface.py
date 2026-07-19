@@ -35,11 +35,9 @@ def main(page: ft.Page):
                 nome_arquivo = e.files[0].name
                 caminho_pdf_selecionado[0] = os.path.join(PASTA_UPLOADS, nome_arquivo)
                 
-                # O SEGREDO: Força a atualização do texto do botão imediatamente
                 botao_anexar.text = f"PDF: {nome_arquivo}"
                 botao_anexar.update() 
                 
-                # Inicia o upload para o Render
                 seletor_nova_guia.upload([
                     ft.FilePickerUploadFile(nome_arquivo, upload_url=page.get_upload_url(nome_arquivo, 60))
                 ])
@@ -60,19 +58,11 @@ def main(page: ft.Page):
     botao_anexar = ft.FilledButton(
         "Anexar PDF Inicial", 
         icon=ft.icons.UPLOAD_FILE, 
-        # Removido o filtro de extensão que buga os navegadores
         on_click=lambda _: seletor_nova_guia.pick_files()
     )
 
-    dialogo_nova_guia = ft.AlertDialog(
-        title=ft.Text("Cadastrar Novo Material"),
-        content=ft.Column([campo_material, campo_data, botao_anexar], tight=True),
-    )
-    page.overlay.append(dialogo_nova_guia)
-
-    def fechar_dialogo(e=None):
-        dialogo_nova_guia.open = False
-        page.update()
+    # Criamos o botão salvar antes para podermos mudar o texto dele
+    botao_salvar = ft.FilledButton("Salvar", style=ft.ButtonStyle(bgcolor=ft.colors.GREEN, color=ft.colors.WHITE))
 
     def salvar_guia(e):
         if not caminho_pdf_selecionado[0]:
@@ -80,34 +70,55 @@ def main(page: ft.Page):
             return
             
         if not os.path.exists(caminho_pdf_selecionado[0]):
-            mostrar_aviso("A processar o anexo... clique em Salvar novamente num instante.", ft.colors.ORANGE)
+            mostrar_aviso("A transferir do PC para a nuvem... Tente de novo em 3 segundos.", ft.colors.ORANGE)
             return
             
         url_api = f"{URL_BASE}/guias/upload"
         dados = {"nome_material": campo_material.value, "data_recebimento": campo_data.value}
         
+        # MUDANÇA 1: Mostra que está a trabalhar e evita duplos cliques
+        botao_salvar.text = "Enviando..."
+        botao_salvar.disabled = True
+        page.update()
+        
         try:
             with open(caminho_pdf_selecionado[0], "rb") as f:
                 arquivos = {"ficheiro_pdf": f}
-                resposta = requests.post(url_api, data=dados, files=arquivos)
+                # MUDANÇA 2: TIMEOUT! Se demorar mais de 15s, ele desiste e não congela a tela
+                resposta = requests.post(url_api, data=dados, files=arquivos, timeout=15)
             
             if resposta.status_code == 200:
                 campo_material.value = ""
                 campo_data.value = ""
                 botao_anexar.text = "Anexar PDF Inicial"
                 caminho_pdf_selecionado[0] = None
-                fechar_dialogo()
+                dialogo_nova_guia.open = False
                 carregar_guias() 
                 mostrar_aviso("Guia salva com sucesso!", ft.colors.GREEN)
             else:
-                mostrar_aviso(f"Erro do servidor: {resposta.text}")
+                mostrar_aviso(f"Erro da API: {resposta.text}")
+                
+        except requests.exceptions.Timeout:
+            mostrar_aviso("A API demorou muito a responder (está a acordar). Clique em Salvar de novo!", ft.colors.ORANGE)
         except Exception as ex:
             mostrar_aviso(f"Erro de conexão com a API: {ex}")
+        finally:
+            # MUDANÇA 3: Devolve o botão ao normal, não importa se deu certo ou errado
+            botao_salvar.text = "Salvar"
+            botao_salvar.disabled = False
+            page.update()
 
-    dialogo_nova_guia.actions = [
-        ft.TextButton("Cancelar", on_click=fechar_dialogo),
-        ft.FilledButton("Salvar", on_click=salvar_guia, style=ft.ButtonStyle(bgcolor=ft.colors.GREEN, color=ft.colors.WHITE))
-    ]
+    botao_salvar.on_click = salvar_guia
+
+    dialogo_nova_guia = ft.AlertDialog(
+        title=ft.Text("Cadastrar Novo Material"),
+        content=ft.Column([campo_material, campo_data, botao_anexar], tight=True),
+        actions=[
+            ft.TextButton("Cancelar", on_click=lambda e: setattr(dialogo_nova_guia, 'open', False) or page.update()),
+            botao_salvar
+        ]
+    )
+    page.overlay.append(dialogo_nova_guia)
 
     page.floating_action_button = ft.FloatingActionButton(
         content=ft.Row([ft.Icon(ft.icons.ADD), ft.Text("Nova Guia", color=ft.colors.WHITE)], alignment=ft.MainAxisAlignment.CENTER, tight=True),
@@ -131,7 +142,7 @@ def main(page: ft.Page):
         aba_assinadas.controls.clear()
         
         try:
-            resp_pendentes = requests.get(f"{URL_BASE}/guias/pendentes")
+            resp_pendentes = requests.get(f"{URL_BASE}/guias/pendentes", timeout=10)
             if resp_pendentes.status_code == 200:
                 for guia in resp_pendentes.json().get("guias", []):
                     material = guia.get("nome_material", "Sem Nome")
@@ -154,7 +165,7 @@ def main(page: ft.Page):
                     )
                     aba_pendentes.controls.append(cartao)
 
-            resp_assinadas = requests.get(f"{URL_BASE}/guias/assinadas")
+            resp_assinadas = requests.get(f"{URL_BASE}/guias/assinadas", timeout=10)
             if resp_assinadas.status_code == 200:
                 for guia in resp_assinadas.json().get("guias", []):
                     material = guia.get("nome_material", "Sem Nome")
@@ -178,7 +189,7 @@ def main(page: ft.Page):
     carregar_guias()
 
     # ==========================================
-    # 5. ESTRUTURA DE ABAS (CORRIGIDA)
+    # 5. ESTRUTURA DE ABAS
     # ==========================================
     controle_abas = ft.Tabs(
         selected_index=0,
@@ -200,4 +211,5 @@ def main(page: ft.Page):
 
 if __name__ == "__main__":
     porta = int(os.environ.get("PORT", 8080))
-    ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=porta, host="0.0.0.0", upload_dir=PASTA_UPLOADS)
+    # Mantendo a chave secreta aqui para garantir!
+    ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=porta, host="0.0.0.0", upload_dir=PASTA_UPLOADS, secret_key="chave_secreta_guias_123")
