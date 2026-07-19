@@ -30,14 +30,22 @@ def main(page: ft.Page):
     seletor_assinatura = ft.FilePicker()
 
     def ao_selecionar_nova_guia(e: ft.FilePickerResultEvent):
-        if e.files:
-            nome_arquivo = e.files[0].name
-            seletor_nova_guia.upload([
-                ft.FilePickerUploadFile(nome_arquivo, upload_url=page.get_upload_url(nome_arquivo, 60))
-            ])
-            caminho_pdf_selecionado[0] = os.path.join(PASTA_UPLOADS, nome_arquivo)
-            botao_anexar.text = f"PDF: {nome_arquivo}"
-            page.update()
+        try:
+            if e.files and len(e.files) > 0:
+                nome_arquivo = e.files[0].name
+                caminho_pdf_selecionado[0] = os.path.join(PASTA_UPLOADS, nome_arquivo)
+                
+                # O SEGREDO: Força a atualização do texto do botão imediatamente
+                botao_anexar.text = f"PDF: {nome_arquivo}"
+                botao_anexar.update() 
+                
+                # Inicia o upload para o Render
+                seletor_nova_guia.upload([
+                    ft.FilePickerUploadFile(nome_arquivo, upload_url=page.get_upload_url(nome_arquivo, 60))
+                ])
+                mostrar_aviso("PDF anexado! Pode clicar em Salvar.", ft.colors.BLUE)
+        except Exception as erro:
+            mostrar_aviso(f"Erro ao anexar: {erro}", ft.colors.RED)
 
     seletor_nova_guia.on_result = ao_selecionar_nova_guia
     page.overlay.append(seletor_nova_guia)
@@ -52,7 +60,8 @@ def main(page: ft.Page):
     botao_anexar = ft.FilledButton(
         "Anexar PDF Inicial", 
         icon=ft.icons.UPLOAD_FILE, 
-        on_click=lambda _: seletor_nova_guia.pick_files(allowed_extensions=["pdf"])
+        # Removido o filtro de extensão que buga os navegadores
+        on_click=lambda _: seletor_nova_guia.pick_files()
     )
 
     dialogo_nova_guia = ft.AlertDialog(
