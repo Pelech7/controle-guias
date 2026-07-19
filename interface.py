@@ -21,7 +21,9 @@ def main(page: ft.Page):
     # ==========================================
     # 2. SELETORES DE ARQUIVOS (VERSÃO WEB)
     # ==========================================
-    # Na Web, usamos o on_result e o método page.get_upload_url para contornar a segurança do navegador
+    seletor_nova_guia = ft.FilePicker()
+    seletor_assinatura = ft.FilePicker()
+
     def ao_selecionar_nova_guia(e: ft.FilePickerResultEvent):
         if e.files:
             nome_arquivo = e.files[0].name
@@ -34,8 +36,8 @@ def main(page: ft.Page):
             botao_anexar.text = f"PDF: {nome_arquivo}"
             page.update()
 
-    seletor_nova_guia = ft.FilePicker(on_result=ao_selecionar_nova_guia)
-    seletor_assinatura = ft.FilePicker() # Será ajustado para assinatura web depois, se necessário
+    # CORREÇÃO AQUI: Ligamos a ação DEPOIS de criar o seletor
+    seletor_nova_guia.on_result = ao_selecionar_nova_guia
     
     # Na Web é OBRIGATÓRIO estar no overlay
     page.overlay.append(seletor_nova_guia)
@@ -47,7 +49,6 @@ def main(page: ft.Page):
     campo_material = ft.TextField(label="Nome do Material", width=300)
     campo_data = ft.TextField(label="Data de Recebimento", width=300)
     
-    # Agora chama o picker nativo do FilePicker
     botao_anexar = ft.FilledButton(
         "Anexar PDF Inicial", 
         icon=ft.Icons.UPLOAD_FILE, 
@@ -66,7 +67,6 @@ def main(page: ft.Page):
         page.update()
 
     def salvar_guia(e):
-        # A trava que estava bloqueando (agora vai passar porque o upload funciona)
         if not caminho_pdf_selecionado[0]:
             print("Nenhum PDF selecionado!")
             return
@@ -75,7 +75,7 @@ def main(page: ft.Page):
         dados = {"nome_material": campo_material.value, "data_recebimento": campo_data.value}
         
         try:
-            # Lê o ficheiro da pasta temporária do Render e envia para a API
+            # Lê o ficheiro da pasta temporária e envia para a API
             with open(caminho_pdf_selecionado[0], "rb") as f:
                 arquivos = {"ficheiro_pdf": f}
                 resposta = requests.post(url_api, data=dados, files=arquivos)
@@ -108,9 +108,9 @@ def main(page: ft.Page):
     aba_assinadas = ft.ListView(expand=True, controls=[])
 
     def criar_acao_assinar(nome):
-        # Simplificado por enquanto para focarmos no cadastro
         def acao(e):
             print(f"Botão assinar clicado para: {nome}")
+            # Em breve faremos o upload da assinatura da mesma forma
         return acao
 
     def carregar_guias():
@@ -187,5 +187,4 @@ def main(page: ft.Page):
 
 if __name__ == "__main__":
     porta = int(os.environ.get("PORT", 8080))
-    # NOTA: Adicionamos o 'upload_dir' para o servidor aceitar os arquivos do navegador
     ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=porta, host="0.0.0.0", upload_dir=PASTA_UPLOADS)
